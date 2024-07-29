@@ -293,7 +293,7 @@ class DockerTemplates {
 	}
 
 	public function getAllInfo($reload=false,$com=true,$communityApplications=false) {
-		global $dockerManPaths, $host;
+		global $driver, $dockerManPaths, $host;
 		$DockerClient = new DockerClient();
 		$DockerUpdate = new DockerUpdate();
 		//$DockerUpdate->verbose = $this->verbose;
@@ -321,7 +321,13 @@ class DockerTemplates {
 					// non-templated webui, user specified
 					$tmp['url'] = $webui;
 				} else {
-					$ip = ($ct['NetworkMode']=='host'||!is_null(_var($port,'PublicPort'))) ? $host : _var($port,'IP');
+  				if ($ct['NetworkMode']=='host') {
+  					$ip = $host;
+  			  } elseif ($driver[$ct['NetworkMode']]=='ipvlan' || $driver[$ct['NetworkMode']]=='macvlan') {
+  			    $ip = reset($ct['Networks'])['IPAddress'];
+          } else {
+  					$ip = _var($port,'IP');
+  				}
 					$tmp['url'] = $ip ? (strpos($tmp['url'],$ip)!==false ? $tmp['url'] : $this->getControlURL($ct, $ip, $tmp['url'])) : $tmp['url'];
 				}
 				if ( ($tmp['shell'] ?? false) == false )
@@ -931,7 +937,11 @@ class DockerClient {
 			if (isset($driver[$c['NetworkMode']])) {
 				if ($driver[$c['NetworkMode']]=='bridge') {
 					$ports = &$info['HostConfig']['PortBindings'];
-				} else {
+			  } elseif ($driver[$c['NetworkMode']]=='host') {
+			    $c['Ports']['host'] = ['host' => ''];
+			  } elseif ($driver[$c['NetworkMode']]=='ipvlan' || $driver[$c['NetworkMode']]=='macvlan') {
+			    $c['Ports']['vlan'] = ['vlan' => ''];
+        } else {
 					$ports = &$info['Config']['ExposedPorts'];
 				}
 			} else if (!$id) {
@@ -1101,3 +1111,4 @@ class DockerUtil {
 	}
 }
 ?>
+

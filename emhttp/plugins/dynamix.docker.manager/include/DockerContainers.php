@@ -98,9 +98,19 @@ foreach ($containers as $ct) {
   foreach ($ct['Ports'] as $port) {
     if (_var($port,'PublicPort') && _var($port,'Driver') == 'bridge')
       $ports_external[] = sprintf('%s:%s', $host, strtoupper(_var($port,'PublicPort')));
-    if (_var($port,'Driver') == 'ipvlan' || _var($port,'Driver') == 'host')
-      $ports_external[] = sprintf('%s:%s', _var($port,'IP'), strtoupper(_var($port,'PrivatePort')));
-    $ports_internal[] = sprintf('%s:%s', _var($port,'PrivatePort'), strtoupper(_var($port,'Type')));
+    if (isset($ct['Networks']['host'])) {
+      $ports_external[] = sprintf('%s', $netVals['IPAddress']);
+      $ports_internal[] = sprintf('%s', 'all');
+      break;
+    }
+    if (isset($ct['Ports']['vlan'])) {
+      $ports_external[] = sprintf('%s', $netVals['IPAddress']);
+      $ports_internal[] = sprintf('%s', 'all');
+      break;
+    }
+    if ((!isset($ct['Networks']['host'])) || (!isset($ct['Networks']['vlan']))) {
+      $ports_internal[] = sprintf('%s:%s', _var($port,'PrivatePort'), strtoupper(_var($port,'Type')));
+    }
   }
   $paths = [];
   $ct['Volumes'] = is_array($ct['Volumes']) ? $ct['Volumes'] : [];
@@ -168,3 +178,4 @@ foreach ($images as $image) {
 }
 echo "\0".implode($docker)."\0".(pgrep('rc.docker')!==false ? 1:0);
 ?>
+
