@@ -96,6 +96,8 @@ foreach ($containers as $ct) {
   $ports_internal = [];
   $ports_external = [];
   foreach ($ct['Ports'] as $port) {
+    if (strpos($ct['NetworkMode'], 'container:') === 0)
+      break;
     if (_var($port,'PublicPort') && _var($port,'Driver') == 'bridge')
       $ports_external[] = sprintf('%s:%s', $host, strtoupper(_var($port,'PublicPort')));
     if (isset($ct['Networks']['host'])) {
