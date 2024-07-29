@@ -321,13 +321,13 @@ class DockerTemplates {
 					// non-templated webui, user specified
 					$tmp['url'] = $webui;
 				} else {
-  				if ($ct['NetworkMode']=='host') {
-  					$ip = $host;
-  			  } elseif ($driver[$ct['NetworkMode']]=='ipvlan' || $driver[$ct['NetworkMode']]=='macvlan') {
-  			    $ip = reset($ct['Networks'])['IPAddress'];
-          } else {
-  					$ip = _var($port,'IP');
-  				}
+					if ($ct['NetworkMode']=='host') {
+						$ip = $host;
+					} elseif ($driver[$ct['NetworkMode']]=='ipvlan' || $driver[$ct['NetworkMode']]=='macvlan') {
+						$ip = reset($ct['Networks'])['IPAddress'];
+					} else {
+						$ip = _var($port,'IP');
+					}
 					$tmp['url'] = $ip ? (strpos($tmp['url'],$ip)!==false ? $tmp['url'] : $this->getControlURL($ct, $ip, $tmp['url'])) : $tmp['url'];
 				}
 				if ( ($tmp['shell'] ?? false) == false )
