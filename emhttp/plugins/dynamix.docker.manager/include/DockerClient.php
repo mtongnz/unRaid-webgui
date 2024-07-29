@@ -325,10 +325,14 @@ class DockerTemplates {
 						$ip = $host;
 					} elseif ($driver[$ct['NetworkMode']]=='ipvlan' || $driver[$ct['NetworkMode']]=='macvlan') {
 						$ip = reset($ct['Networks'])['IPAddress'];
+					} elseif (!is_null(_var($port,'PublicPort'))) {
+					  $ip = $host;
 					} else {
 						$ip = _var($port,'IP');
 					}
 					$tmp['url'] = $ip ? (strpos($tmp['url'],$ip)!==false ? $tmp['url'] : $this->getControlURL($ct, $ip, $tmp['url'])) : $tmp['url'];
+					if (strpos($ct['NetworkMode'], 'container:') === 0)
+					  $tmp['url'] = '';
 				}
 				if ( ($tmp['shell'] ?? false) == false )
 					$tmp['shell'] = $this->getTemplateValue($image, 'Shell');
