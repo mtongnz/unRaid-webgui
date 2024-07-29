@@ -937,11 +937,11 @@ class DockerClient {
 			if (isset($driver[$c['NetworkMode']])) {
 				if ($driver[$c['NetworkMode']]=='bridge') {
 					$ports = &$info['HostConfig']['PortBindings'];
-			  } elseif ($driver[$c['NetworkMode']]=='host') {
-			    $c['Ports']['host'] = ['host' => ''];
-			  } elseif ($driver[$c['NetworkMode']]=='ipvlan' || $driver[$c['NetworkMode']]=='macvlan') {
-			    $c['Ports']['vlan'] = ['vlan' => ''];
-        } else {
+				} elseif ($driver[$c['NetworkMode']]=='host') {
+					$c['Ports']['host'] = ['host' => ''];
+				} elseif ($driver[$c['NetworkMode']]=='ipvlan' || $driver[$c['NetworkMode']]=='macvlan') {
+					$c['Ports']['vlan'] = ['vlan' => ''];
+				} else {
 					$ports = &$info['Config']['ExposedPorts'];
 				}
 			} else if (!$id) {
