@@ -12,3 +12,8 @@ input.setting_input{margin-right:4rem}
 input,select{margin-top:-0.8rem!important}
 div#configLocation,div#configLocation dl{padding:0!important}
 div#configLocation dt{margin-top:-0.18rem!important}
+#networkSettings{display:grid; grid-template-columns: repeat(4, min-content);}
+#networkSettings>span{padding: 5px;}
+#networkSettings>span>input{vertical-align: bottom;}
+#networkSettings>span:nth-child(1),#networkSettings>span:nth-child(2),#networkSettings>span:nth-child(3),#networkSettings>span:nth-child(4){font-weight: bold;}
+#networkSettings>span:nth-child(8n+5),#networkSettings>span:nth-child(8n+6),#networkSettings>span:nth-child(8n+7),#networkSettings>span:nth-child(8n+8){background-color: #e8e8e8;}
