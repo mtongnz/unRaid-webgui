@@ -141,7 +141,7 @@ if (isset($_POST['contName'])) {
       @unlink("$userTmplDir/my-$existing.xml");
     }
   }
-  if ($startContainer) $cmd = str_replace('/docker create ', '/docker run -d ', $cmd);
+  if ($startContainer) $cmd .= ' && docker start ' . $Name;
   execCommand($cmd);
   if ($startContainer) addRoute($Name); // add route for remote WireGuard access
 
@@ -177,13 +177,13 @@ if (isset($_GET['updateContainer'])){
     $startContainer = false;
     if (!empty($oldContainerInfo) && !empty($oldContainerInfo['State']) && !empty($oldContainerInfo['State']['Running'])) {
       // since container was already running, put it back it to a running state after update
-      $cmd = str_replace('/docker create ', '/docker run -d ', $cmd);
       $startContainer = true;
       // attempt graceful stop of container first
       stopContainer($Name, false, $echo);
     }
     // force kill container if still running after time-out
     if (empty($_GET['communityApplications'])) removeContainer($Name, $echo);
+    if ($startContainer) $cmd .= ' && docker start ' . $Name;
     execCommand($cmd, $echo);
     if ($startContainer) addRoute($Name); // add route for remote WireGuard access
     $DockerClient->flushCaches();
@@ -521,8 +521,9 @@ function removeConfig(num) {
 }
 
 function prepareConfig(form) {
-  var types = [], values = [], targets = [], vcpu = [];
-  if ($('select[name="contNetwork"]').val()=='host') {
+  var types = [], values = [], targets = [], vcpu = [], networks = [], ips = [];
+  // if ($('select[name="contNetwork"]').val()=='host') {
+  if (getCheckedNetworks().includes('host')) {
     $(form).find('input[name="confType[]"]').each(function(){types.push($(this).val());});
     $(form).find('input[name="confValue[]"]').each(function(){values.push($(this));});
     $(form).find('input[name="confTarget[]"]').each(function(){targets.push($(this));});
@@ -530,11 +531,23 @@ function prepareConfig(form) {
   }
   $(form).find('input[id^="box"]').each(function(){if ($(this).prop('checked')) vcpu.push($('#'+$(this).prop('id').replace('box','cpu')).text());});
   form.contCPUset.value = vcpu.join(',');
+
+  var networks = getCheckedNetworks();
+  var ips = [];
+  networks.forEach((net) => ips.push($('#networkSettings input:text[name="'+net+'"]')[0].value));
+  $('input[name="contNetwork"]').val(networks.join(','));
+  $('input[name="contMyIP"]').val(ips.join(','));
 }
 
 function makeName(type) {
   var i = $("#configLocation input[name^='confType'][value='"+type+"']").length+1;
   return "Host "+type.replace('Variable','Key')+" "+i;
+}
+
+function getCheckedNetworks() {
+  var networks = [];
+  $('#networkSettings input:checked').each(function() {networks.push($(this).attr('name'));});
+  return networks;
 }
 
 function toggleMode(el,disabled) {
@@ -545,7 +558,7 @@ function toggleMode(el,disabled) {
   var mode       = div.find('#Mode');
   var value      = valueDiv.find('input[name=Value]');
   var target     = targetDiv.find('input[name=Target]');
-  var driver     = drivers[$('select[name="contNetwork"]')[0].value];
+  var drivers    = getCheckedNetworks();
   value.unbind();
   target.unbind();
   valueDiv.css('display', '');
@@ -563,14 +576,14 @@ function toggleMode(el,disabled) {
   case 1: // Port
     mode.html("<dl><dt>_(Connection Type)_:</dt><dd><select name='Mode'><option value='tcp'>_(TCP)_</option><option value='udp'>_(UDP)_</option></select></dd></dl>");
     value.addClass("numbersOnly");
-    if (driver=='bridge') {
+    if (drivers.includes('bridge')) {
       if (target.val()) target.prop('disabled',<?=$disableEdit?>); else target.addClass("numbersOnly");
       targetDiv.find('#dt1').text("_(Container Port)_");
       targetDiv.show();
     } else {
       targetDiv.hide();
     }
-    if (driver!='null') {
+    if (drivers.length > 0) {
       valueDiv.find('#dt2').text("_(Host Port)_");
       valueDiv.show();
     } else {
@@ -706,7 +719,7 @@ _(Template)_:
 
 <div markdown="1" class="<?=$showAdditionalInfo?>">
 _(Name)_:
-: <input type="text" name="contName" pattern="[a-zA-Z0-9][a-zA-Z0-9_.-]+" required>
+: <input type="text" name="contName" pattern="[a-zA-Z0-9][a-zA-Z0-9_.\-]+" required>
 
 :docker_client_name_help:
 
@@ -748,6 +761,7 @@ _(Categories)_:
 : <input type="hidden" name="contCategory">
   <select id="catSelect" size="1" multiple="multiple" style="display:none" onchange="prepareCategory();">
   <optgroup label="_(Categories)_">
+  <option value="AI:">_(AI)_</option>
   <option value="Backup:">_(Backup)_</option>
   <option value="Cloud:">_(Cloud)_</option>
   <option value="Crypto:">_(Crypto Currency)_</option>
@@ -853,7 +867,57 @@ _(CPU Pinning)_:
 :docker_cpu_pinning_help:
 
 </div>
-_(Network Type)_:
+
+<dl>
+  <dt>_(Networks)_:</dt>
+  <dd id="networkSettings">
+      <span></span>
+      <span><?=_('Network')?></span>
+      <span><?=_('IP Address')?></span>
+      <span><?=_('Subnet')?></span>
+
+      <?
+      function displayNetworkItem($network) {
+        global $subnet;
+        $name = $network;
+
+        if ($network == 'bridge')
+          $name = _('Bridge');
+        else if ($network == 'host')
+          $name = _('Host');
+        else if (preg_match('/^(br|bond|eth)[0-9]+(\.[0-9]+)?$/',$network)) {
+          [$eth,$x] = my_explode('.',$network);
+          $eth = str_replace(['br','bond'],'eth',$eth);
+          $n = $x ? 1 : 0; while (isset($$eth["VLANID:$n"]) && $$eth["VLANID:$n"] != $x) $n++;
+          if ($$eth["DESCRIPTION:$n"]) $name .= ' -- '.compress(trim($$eth["DESCRIPTION:$n"]));
+        } elseif (preg_match('/^wg[0-9]+$/',$network)) {
+          $conf = file("/etc/wireguard/$network.conf");
+          if ($conf[1][0]=='#') $name .= ' -- '.compress(trim(substr($conf[1],1)));
+        }
+
+        echo "<span><input type='checkbox' name='{$network}' /></span>";
+        echo "<span>{$name}</span>";
+        echo "<span><input type='text' name='{$network}' value='{$ip}' onInput='ipChanged(this);' /></span>";
+        echo "<span>{$subnet[$network]}</span>";
+      }
+
+      displayNetworkItem('bridge');
+      displayNetworkItem('host');
+      foreach ($custom as $network)
+        displayNetworkItem($network);
+      ?>
+  </dd>
+    <input type="hidden" name="contMyIP">
+    <input type="hidden" name="contNetwork">
+</dl>
+
+
+
+
+
+
+
+<!-- _(Network Type)_:
 : <select name="contNetwork" onchange="showSubnet(this.value)">
   <?=mk_option(1,'bridge',_('Bridge'))?>
   <?=mk_option(1,'host',_('Host'))?>
@@ -879,7 +943,7 @@ _(Fixed IP address)_ (_(optional)_):
 
 :docker_fixed_ip_help:
 
-</div>
+</div> -->
 _(Console shell command)_:
 : <select name="contShell">
   <?=mk_option(1,'sh',_('Shell'))?>
@@ -1008,6 +1072,11 @@ var subnet = {};
 subnet['<?=$network?>'] = '<?=$value?>';
 <?endforeach;?>
 
+function ipChanged(el) {
+  if (el.value != '')
+    $('input:checkbox[name="'+el.name+'"]').prop('checked', true);
+}
+
 function showSubnet(bridge) {
   if (bridge.match(/^(bridge|host|none)$/i) !== null) {
     $('.myIP').hide();
@@ -1098,7 +1167,8 @@ $(function() {
       $('#canvas').find('#Overview:first').hide();
     }
     // Load config info
-    var network = $('select[name="contNetwork"]')[0].selectedIndex;
+    // var network = $('select[name="contNetwork"]')[0].selectedIndex;
+    var network = $('input[name="contNetwork"]').val;
     for (var i = 0; i < Settings.Config.length; i++) {
       confNum += 1;
       Opts = Settings.Config[i];
@@ -1121,7 +1191,15 @@ $(function() {
     $('#canvas').find('#Overview:first').hide();
   }
   // Show associated subnet with fixed IP (if existing)
-  showSubnet($('select[name="contNetwork"]').val());
+  // showSubnet($('select[name="contNetwork"]').val());
+
+  var networks = Settings.Network.split(',');
+  var ips = Settings.MyIP.split(',');
+  for (let i = 0; i < networks.length; ++i) {
+    $('input[name=' + networks[i] + ']').val(ips[i]);
+    $('input[name=' + networks[i] + ']').parent().prev().prev().find('input').prop('checked', true);
+  }
+
   // Add list of docker allocations
   $("#dockerAllocations").html(makeAllocations(Allocations,$('input[name="contName"]').val()));
   // Add switchButton

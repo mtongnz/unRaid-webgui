@@ -132,7 +132,14 @@ function xmlToVar($xml) {
     $out['Network'] = xml_decode($xml->Networking->Mode);
   }
   // check if network exists
-  if (!key_exists($out['Network'],$subnet)) $out['Network'] = 'none';
+  $networks = explode(',', $out['Network']);
+  $ips = explode(',', $out['MyIP']);
+  for ($x = 0; $x < count($networks); $x++) {
+    if (!key_exists($networks[$x],$subnet)) { array_splice($networks, $x, 1); array_splice($ips, $x, 1); $x--;}
+  }
+  $out['Network'] = implode(',', $networks);
+  $out['MyIP'] = implode(',', $ips);
+  // if (!key_exists($out['Network'],$subnet)) $out['Network'] = 'none';
   // V1 compatibility
   if ($xml['version'] != '2') {
     if (isset($xml->Description)) {
@@ -237,13 +244,37 @@ function xmlSecurity(&$template) {
 }
 
 function xmlToCommand($xml, $create_paths=false) {
-  global $docroot, $var, $cfg, $driver;
+  global $docroot, $var, $driver;
   $xml           = xmlToVar($xml);
   $cmdName       = strlen($xml['Name']) ? '--name='.escapeshellarg($xml['Name']) : '';
   $cmdPrivileged = strtolower($xml['Privileged'])=='true' ? '--privileged=true' : '';
-  $cmdNetwork    = preg_match('/\-\-net(work)?=/',$xml['ExtraParams']) ? "" : '--net='.escapeshellarg(strtolower($xml['Network']));
-  $cmdMyIP       = '';
-  foreach (explode(' ',str_replace(',',' ',$xml['MyIP'])) as $myIP) if ($myIP) $cmdMyIP .= (strpos($myIP,':')?'--ip6=':'--ip=').escapeshellarg($myIP).' ';
+  // $cmdNetwork    = preg_match('/\-\-net(work)?=/',$xml['ExtraParams']) ? "" : '--net='.escapeshellarg(strtolower($xml['Network']));
+  // $cmdMyIP       = '';
+  // foreach (explode(' ',str_replace(',',' ',$xml['MyIP'])) as $myIP) if ($myIP) $cmdMyIP .= (strpos($myIP,':')?'--ip6=':'--ip=').escapeshellarg($myIP).' ';
+  
+  
+  $cmdFirstNetwork  = '';
+  $cmdNetwork       = '';
+
+  if (!preg_match('/\-\-net(work)?=/',$xml['ExtraParams'])) {
+    $networks = explode(',', strtolower($xml['Network']));
+    $ips = explode(',', strtolower($xml['MyIP']));
+
+    if ((strlen($networks[0]) === 0))
+      $cmdFirstNetwork  = '--net=none';
+    else {
+      $cmdFirstNetwork = '--net=' . escapeshellarg(strtolower($networks[0]))
+                      . ((strlen($ips[0]) === 0) ? '' : ((strpos($ips[0],':')?' --ip6=':' --ip=').escapeshellarg($ips[0]).' '));
+
+      for ($x = 1; $x < count($networks); $x++){
+        $cmdNetwork .= ' && docker network connect '
+                    . ((strlen($ips[$x]) === 0) ? '' : ((strpos($ips[$x],':')?'--ip6=':'--ip=').escapeshellarg($ips[$x]).' '))
+                    . strtolower($networks[$x]) . ' '
+                    . $xml['Name'];
+      }
+    }
+  }
+
   $cmdCPUset     = strlen($xml['CPUset']) ? '--cpuset-cpus='.escapeshellarg($xml['CPUset']) : '';
   $Volumes       = [''];
   $Ports         = [''];
@@ -270,6 +301,8 @@ function xmlToCommand($xml, $create_paths=false) {
     $Mode            = strval($config['Mode']);
     if ($confType != "device" && !strlen($containerConfig)) continue;
     if ($confType == "path") {
+      if ( ! trim($hostConfig) || ! trim($containerConfig) )
+        continue;
       $Volumes[] = escapeshellarg($hostConfig).':'.escapeshellarg($containerConfig).':'.escapeshellarg($Mode);
       if (!file_exists($hostConfig) && $create_paths) {
         @mkdir($hostConfig, 0777, true);
@@ -299,15 +332,31 @@ function xmlToCommand($xml, $create_paths=false) {
       $Devices[] = escapeshellarg($hostConfig);
     }
   }
-  $logSize = $logFile = '';
-  if (($cfg['DOCKER_LOG_ROTATION']??'')=='yes') {
-    $logSize = $cfg['DOCKER_LOG_SIZE'] ?? '10m';
-    $logSize = "--log-opt max-size='$logSize'";
-    $logFile = $cfg['DOCKER_LOG_FILES'] ?? '1';
-    $logFile = "--log-opt max-file='$logFile'";
+
+  /* Read the docker configuration file. */
+  $cfgfile		= "/boot/config/docker.cfg";
+  $config_ini	= @parse_ini_file($cfgfile, true, INI_SCANNER_RAW);
+  $docker_cfg	= ($config_ini !== false) ? $config_ini : [];
+
+  // Add pid limit if user has not specified it as an extra parameter
+  $pidsLimit = preg_match('/--pids-limit (\d+)/', $xml['ExtraParams'], $matches) ? $matches[1] : null;
+  if ($pidsLimit === null) {
+    $pid_limit = "--pids-limit ";
+    if (($docker_cfg['DOCKER_PID_LIMIT']??'') != "") {
+      $pid_limit .= $docker_cfg['DOCKER_PID_LIMIT'];
+    } else {
+      $pid_limit .= "2048";
+    }
+  } else {
+    $pid_limit = "";
   }
-  $cmd = sprintf($docroot.'/plugins/dynamix.docker.manager/scripts/docker create %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s',
-         $cmdName, $cmdNetwork, $cmdMyIP, $cmdCPUset, $logSize, $logFile, $cmdPrivileged, implode(' -e ', $Variables), implode(' -l ', $Labels), implode(' -p ', $Ports), implode(' -v ', $Volumes), implode(' --device=', $Devices), $xml['ExtraParams'], escapeshellarg($xml['Repository']), $xml['PostArgs']);
+
+  // $cmd = sprintf($docroot.'/plugins/dynamix.docker.manager/scripts/docker create %s %s %s %s %s %s %s %s %s %s %s %s %s %s',
+  //        $cmdName, $cmdNetwork, $cmdMyIP, $cmdCPUset, $pid_limit, $cmdPrivileged, implode(' -e ', $Variables), implode(' -l ', $Labels), implode(' -p ', $Ports), implode(' -v ', $Volumes), implode(' --device=', $Devices), $xml['ExtraParams'], escapeshellarg($xml['Repository']), $xml['PostArgs']);
+  $cmd = sprintf($docroot.'/plugins/dynamix.docker.manager/scripts/docker create %s %s %s %s %s %s %s %s %s %s %s %s %s %s',
+         $cmdName, $cmdFirstNetwork, $cmdCPUset, $pid_limit, $cmdPrivileged, implode(' -e ', $Variables), implode(' -l ', $Labels), implode(' -p ', $Ports), implode(' -v ', $Volumes), implode(' --device=', $Devices), $xml['ExtraParams'], escapeshellarg($xml['Repository']), $xml['PostArgs'], $cmdNetwork);
+  // echo $cmd;
+  // exit;
   return [preg_replace('/\s\s+/', ' ', $cmd), $xml['Name'], $xml['Repository']];
 }
 function stopContainer($name, $t=false, $echo=true) {
