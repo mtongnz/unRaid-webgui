@@ -2245,12 +2245,9 @@ The content of this field is container specific.
 Checking a CPU core(s) will limit the container to run on the selected cores only. Selecting no cores lets the container run on all available cores (default)
 :end
 
-:docker_fixed_ip_help:
-If the Bridge type is selected, the application’s network access will be restricted to only communicating on the ports specified in the port mappings section.
-If the Host type is selected, the application will be given access to communicate using any port on the host that isn’t already mapped to another in-use application/service.
-Generally speaking, it is recommended to leave this setting to its default value as specified per application template.
-
-IMPORTANT NOTE:  If adjusting port mappings, do not modify the settings for the Container port as only the Host port can be adjusted.
+:docker_networks_help:
+Check the box for each network you wish to connect to this container.  An IP address can be specified (either IPv4 or IPv6).  Leave the IP Address field blank to use an auto generated IP (either from Docker or DHCP).
+Select the primary network from the select dropdown.  This is the IP that is used by default for the WebUI link on the Docker page.
 :end
 
 :docker_privileged_help:

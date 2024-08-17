@@ -522,7 +522,6 @@ function removeConfig(num) {
 
 function prepareConfig(form) {
   var types = [], values = [], targets = [], vcpu = [], networks = [], ips = [];
-  // if ($('select[name="contNetwork"]').val()=='host') {
   if (getCheckedNetworks().includes('host')) {
     $(form).find('input[name="confType[]"]').each(function(){types.push($(this).val());});
     $(form).find('input[name="confValue[]"]').each(function(){values.push($(this));});
@@ -911,39 +910,8 @@ _(CPU Pinning)_:
     <input type="hidden" name="contNetwork">
 </dl>
 
+:docker_networks_help:
 
-
-
-
-
-
-<!-- _(Network Type)_:
-: <select name="contNetwork" onchange="showSubnet(this.value)">
-  <?=mk_option(1,'bridge',_('Bridge'))?>
-  <?=mk_option(1,'host',_('Host'))?>
-  <?=mk_option(1,'none',_('None'))?>
-  <?foreach ($custom as $network):?>
-  <?$name = $network;
-  if (preg_match('/^(br|bond|eth)[0-9]+(\.[0-9]+)?$/',$network)) {
-    [$eth,$x] = my_explode('.',$network);
-    $eth = str_replace(['br','bond'],'eth',$eth);
-    $n = $x ? 1 : 0; while (isset($$eth["VLANID:$n"]) && $$eth["VLANID:$n"] != $x) $n++;
-    if ($$eth["DESCRIPTION:$n"]) $name .= ' -- '.compress(trim($$eth["DESCRIPTION:$n"]));
-  } elseif (preg_match('/^wg[0-9]+$/',$network)) {
-    $conf = file("/etc/wireguard/$network.conf");
-    if ($conf[1][0]=='#') $name .= ' -- '.compress(trim(substr($conf[1],1)));
-  }
-  ?>
-  <?=mk_option(1,$network,_('Custom')." : $name")?>
-  <?endforeach;?></select>
-
-<div markdown="1" class="myIP noshow">
-_(Fixed IP address)_ (_(optional)_):
-: <input type="text" name="contMyIP"><span id="myIP"></span>
-
-:docker_fixed_ip_help:
-
-</div> -->
 _(Console shell command)_:
 : <select name="contShell">
   <?=mk_option(1,'sh',_('Shell'))?>
@@ -1167,8 +1135,6 @@ $(function() {
       $('#canvas').find('#Overview:first').hide();
     }
     // Load config info
-    // var network = $('select[name="contNetwork"]')[0].selectedIndex;
-    var network = $('input[name="contNetwork"]').val;
     for (var i = 0; i < Settings.Config.length; i++) {
       confNum += 1;
       Opts = Settings.Config[i];
@@ -1190,14 +1156,12 @@ $(function() {
   } else {
     $('#canvas').find('#Overview:first').hide();
   }
-  // Show associated subnet with fixed IP (if existing)
-  // showSubnet($('select[name="contNetwork"]').val());
-
   var networks = Settings.Network.split(',');
+  var network = networks[0];
   var ips = Settings.MyIP.split(',');
   for (let i = 0; i < networks.length; ++i) {
-    $('input[name=' + networks[i] + ']').val(ips[i]);
-    $('input[name=' + networks[i] + ']').parent().prev().prev().find('input').prop('checked', true);
+    $('#networkSettings input:checkbox[name="' + networks[i] + '"]').prop('checked', true);
+    $('#networkSettings input:text[name="' + networks[i] + '"]').val(ips[i]);
   }
 
   // Add list of docker allocations
