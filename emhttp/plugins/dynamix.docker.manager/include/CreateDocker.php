@@ -534,6 +534,15 @@ function prepareConfig(form) {
   var networks = getCheckedNetworks();
   var ips = [];
   networks.forEach((net) => ips.push($('#networkSettings input:text[name="'+net+'"]')[0].value));
+  
+  var primaryNetwork = $('select[name="primaryNetwork"]').find(":selected").val();
+  var primaryIP = $('#networkSettings input:text[name="'+primaryNetwork+'"]')[0].value;
+  var primaryIndex = networks.indexOf(primaryNetwork);
+  networks.splice(primaryIndex, 1);
+  ips.splice(primaryIndex, 1);
+  networks = [primaryNetwork].concat(networks);
+  ips = [primaryIP].concat(ips);
+
   $('input[name="contNetwork"]').val(networks.join(','));
   $('input[name="contMyIP"]').val(ips.join(','));
 }
@@ -867,49 +876,50 @@ _(CPU Pinning)_:
 
 </div>
 
-<dl>
-  <dt>_(Networks)_:</dt>
-  <dd id="networkSettings">
-      <span></span>
-      <span><?=_('Network')?></span>
-      <span><?=_('IP Address')?></span>
-      <span><?=_('Subnet')?></span>
+_(Networks)_:
+: <div id="networkSettings">
+  <span></span>
+  <span><?=_('Network')?></span>
+  <span><?=_('IP Address')?></span>
+  <span><?=_('Subnet')?></span>
 
-      <?
-      function displayNetworkItem($network) {
-        global $subnet;
-        $name = $network;
+  <?
+  function displayNetworkItem($network) {
+    global $subnet;
+    $name = $network;
 
-        if ($network == 'bridge')
-          $name = _('Bridge');
-        else if ($network == 'host')
-          $name = _('Host');
-        else if (preg_match('/^(br|bond|eth)[0-9]+(\.[0-9]+)?$/',$network)) {
-          [$eth,$x] = my_explode('.',$network);
-          $eth = str_replace(['br','bond'],'eth',$eth);
-          $n = $x ? 1 : 0; while (isset($$eth["VLANID:$n"]) && $$eth["VLANID:$n"] != $x) $n++;
-          if ($$eth["DESCRIPTION:$n"]) $name .= ' -- '.compress(trim($$eth["DESCRIPTION:$n"]));
-        } elseif (preg_match('/^wg[0-9]+$/',$network)) {
-          $conf = file("/etc/wireguard/$network.conf");
-          if ($conf[1][0]=='#') $name .= ' -- '.compress(trim(substr($conf[1],1)));
-        }
+    if ($network == 'bridge')
+      $name = _('Bridge');
+    else if ($network == 'host')
+      $name = _('Host');
+    else if (preg_match('/^(br|bond|eth)[0-9]+(\.[0-9]+)?$/',$network)) {
+      [$eth,$x] = my_explode('.',$network);
+      $eth = str_replace(['br','bond'],'eth',$eth);
+      $n = $x ? 1 : 0; while (isset($$eth["VLANID:$n"]) && $$eth["VLANID:$n"] != $x) $n++;
+      if ($$eth["DESCRIPTION:$n"]) $name .= ' -- '.compress(trim($$eth["DESCRIPTION:$n"]));
+    } elseif (preg_match('/^wg[0-9]+$/',$network)) {
+      $conf = file("/etc/wireguard/$network.conf");
+      if ($conf[1][0]=='#') $name .= ' -- '.compress(trim(substr($conf[1],1)));
+    }
 
-        echo "<span><input type='checkbox' name='{$network}' /></span>";
-        echo "<span>{$name}</span>";
-        echo "<span><input type='text' name='{$network}' value='{$ip}' onInput='ipChanged(this);' /></span>";
-        echo "<span>{$subnet[$network]}</span>";
-      }
+    echo "<span><input type='checkbox' name='{$network}' onChange='updateNetworkSelect()' /></span>";
+    echo "<span>{$name}</span>";
+    echo "<span><input type='text' name='{$network}' value='{$ip}' onInput='ipChanged(this);' /></span>";
+    echo "<span>{$subnet[$network]}</span>";
+  }
 
-      displayNetworkItem('bridge');
-      displayNetworkItem('host');
-      foreach ($custom as $network)
-        displayNetworkItem($network);
-      ?>
-  </dd>
-    <input type="hidden" name="contMyIP">
-    <input type="hidden" name="contNetwork">
-</dl>
+  displayNetworkItem('bridge');
+  displayNetworkItem('host');
+  foreach ($custom as $network)
+    displayNetworkItem($network);
+  ?>
+</div>
+<input type="hidden" name="contMyIP">
+<input type="hidden" name="contNetwork">
 
+_(Primary Network)_:
+: <select name="primaryNetwork"></select>
+  
 :docker_networks_help:
 
 _(Console shell command)_:
@@ -1045,6 +1055,22 @@ function ipChanged(el) {
     $('input:checkbox[name="'+el.name+'"]').prop('checked', true);
 }
 
+function updateNetworkSelect(currentPrimaryNetwork=null) {
+  var networks = getCheckedNetworks();
+  if (currentPrimaryNetwork === null) currentPrimaryNetwork = $('select[name="primaryNetwork"]').find(":selected").val();
+  $('select[name="primaryNetwork"]').empty();
+  $.each(networks, function (i, network) {
+    if (network == 'host') name = 'Host';
+    else if (network == 'bridge') name = 'Bridge';
+    else name = network;
+    $('select[name="primaryNetwork"]').append($('<option>', { 
+        value: network,
+        text : name
+    }));
+  });
+  $('select[name="primaryNetwork"]').val(currentPrimaryNetwork);
+}
+
 function showSubnet(bridge) {
   if (bridge.match(/^(bridge|host|none)$/i) !== null) {
     $('.myIP').hide();
@@ -1163,7 +1189,8 @@ $(function() {
     $('#networkSettings input:checkbox[name="' + networks[i] + '"]').prop('checked', true);
     $('#networkSettings input:text[name="' + networks[i] + '"]').val(ips[i]);
   }
-
+  updateNetworkSelect(network);
+  
   // Add list of docker allocations
   $("#dockerAllocations").html(makeAllocations(Allocations,$('input[name="contName"]').val()));
   // Add switchButton
